@@ -66,7 +66,7 @@ jobs:
           at: .
       - run:
          name: Pack Packages
-         command: dotnet pack ./src/metal.sln --configuration Release $PKG_SFX_TAG
+         command: dotnet pack ./src/metal.sln --configuration Release $PKG_SFX_TAG -o packages
       - run:
          name: Publish to Nuget
          command: dotnet nuget push packages/*.nupkg --api-key ${NUGET_PUBLISH_KEY} --source https://api.nuget.org/v3/index.json
