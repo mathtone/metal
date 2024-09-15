@@ -1,0 +1,94 @@
+version: 2.1
+commands:
+  get-version:
+    steps:
+      - run:
+         name: Getting Package Version
+         command: |
+          branch=$CIRCLE_BRANCH
+          ver=${branch/"release/"/""}
+          suffix=${ver#*-}
+          build=${ver%-*}
+          vertag=""
+          if  [ $suffix == "" ] || [ $suffix == $build ]; then
+            echo NO SUFFIX
+            echo "export PKG_SFX_TAG=""" >> $BASH_ENV
+            vertag=NOPE
+          else
+            echo $"SUFFIX FOUND- {$suffix}"
+            vertag=$"--version-suffix $suffix"
+            echo $"VERSION TAG- $vertag"
+            echo "export PKG_SFX_TAG='$vertag'" >> $BASH_ENV
+          fi
+          
+          echo "export PKG_VER=$build" >> $BASH_ENV
+          echo "export PKG_SFX=$suffix" >> $BASH_ENV
+
+jobs:
+  get-code:
+    docker:
+      - image: mcr.microsoft.com/dotnet/sdk:9.0
+    working_directory: /mnt/ramdisk
+    steps:
+      - checkout
+      - persist_to_workspace:
+          root: .
+          paths:
+            - LICENSE.txt
+            - src
+      
+  integration-tests:
+    docker:
+      - image: mcr.microsoft.com/dotnet/sdk:9.0
+      # - image: postgres
+      #   environment:
+      #     POSTGRES_USER: postgres
+      #     POSTGRES_PASSWORD: postgres
+      # - image: mcr.microsoft.com/mssql/server:2022-latest
+      #   environment:
+      #     MSSQL_SA_PASSWORD: test!1234
+      #     ACCEPT_EULA: Y
+    working_directory: /mnt/ramdisk
+    steps:
+      - attach_workspace:
+          at: .
+      - run: ls -l
+      - run: ls ./src -l
+      - run: ls ./src/tests -l
+      - run: dotnet test src/metal.sln --configuration Release
+      #- sonarcloud/scan
+
+  publish-nuget:
+    docker:
+      - image: mcr.microsoft.com/dotnet/sdk:9.0
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+         name: Publish to Nuget
+         command: dotnet nuget push packages/*.nupkg --api-key ${NUGET_PUBLISH_KEY} --source https://api.nuget.org/v3/index.json
+workflows:
+  build-release:
+    jobs:
+      - get-code
+      - integration-tests:
+          context: MATHTONE_DEV
+          requires:
+            - get-code
+      - approve-ship:
+          filters:
+            branches:
+               only:
+                  - /release.*/
+          context: MATHTONE_DEV
+          type: approval
+          requires:
+            - disintegration-tests
+      - publish-nuget:
+          filters:
+            branches:
+               only:
+                  - /release.*/
+          context: MATHTONE_DEV
+          requires:
+            - approve-ship
