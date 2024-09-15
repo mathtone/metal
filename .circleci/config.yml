@@ -83,7 +83,7 @@ workflows:
           context: MATHTONE_DEV
           type: approval
           requires:
-            - disintegration-tests
+            - integration-tests
       - publish-nuget:
           filters:
             branches:
